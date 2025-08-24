@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>My Messenger</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f4f4;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+        }
+        form {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        input[type="text"],
+        input[type="number"] {
+            padding: 10px;
+            width: 200px;
+            margin: 5px;
+        }
+        button {
+            padding: 10px 20px;
+        }
+        .chat-box {
+            max-width: 600px;
+            margin: auto;
+            background: #fff;
+            padding: 20px;
+            height: 400px;
+            overflow-y: scroll;
+            border: 1px solid #ccc;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .username {
+            font-weight: bold;
+        }
+        .timestamp {
+            font-size: 0.8em;
+            color: gray;
+        }
+        .section {
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>💬 mY Messenger</h1>
+
+    <!-- Show user and logout -->
+    <div style="text-align:center;">
+        <p>Welcome, <strong>{{ current_user.username }}</strong></p>
+        <a href="/logout">Logout</a>
+    </div>
+
+    <!-- Show users and send friend request -->
+    <div class="section">
+        <h3>All Users:</h3>
+        {% for user in users %}
+            <p>
+                {{ user.username }}
+                <a href="/send_friend_request/{{ user.id }}">[Send Friend Request]</a>
+            </p>
+        {% endfor %}
+    </div>
+
+    <!-- Friend Requests -->
+    <div class="section">
+        <h3>Friend Requests:</h3>
+        {% for req in requests %}
+            <p>
+                From User ID: {{ req.from_user }}
+                <a href="/accept_request/{{ req.id }}">[Accept]</a>
+                <a href="/delete_request/{{ req.id }}">[Delete]</a>
+            </p>
+        {% endfor %}
+    </div>
+
+    <!-- Message Send Form -->
+    <form method="POST" action="/send_message">
+        <input type="number" name="receiver_id" placeholder="User ID to chat with" required>
+        <input type="text" name="message" placeholder="Type a message..." required>
+        <button type="submit">Send</button>
+    </form>
+
+    <!-- Chat Messages -->
+    <div class="chat-box">
+        {% for msg in messages %}
+        <div class="message">
+            <span class="username">From: {{ msg.sender_id }} → {{ msg.receiver_id }}</span><br>
+            <span class="text">{{ msg.content }}</span><br>
+            <span class="timestamp">{{ msg.timestamp }}</span>
+            {% if msg.sender_id == current_user.id %}
+                <a href="/delete_message/{{ msg.id }}">[Delete]</a>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</body>
+</html>
