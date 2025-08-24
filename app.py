@@ -132,11 +132,7 @@ def delete_message(msg_id):
     return redirect(url_for('index'))
 
 if __name__ == '__main__':
+    from os import environ
     with app.app_context():
         db.create_all()
-
-    app.run(host='0.0.0.0', port=5000, debug=True)
-    # app.py ke end me:
-if __name__ == '__main__':
-    from os import environ
     app.run(host='0.0.0.0', port=int(environ.get("PORT", 5000)))
