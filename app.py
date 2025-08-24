@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, login_user, logout_user, login_required, UserMixin, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
+from sqlalchemy import or_, and_
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret123'
@@ -13,11 +14,24 @@ db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
+# Many-to-many relationship for friends
+friends = db.Table('friends',
+    db.Column('user_id', db.Integer, db.ForeignKey('user.id')),
+    db.Column('friend_id', db.Integer, db.ForeignKey('user.id'))
+)
+
 # User table
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(150), nullable=False)
+    
+    friends = db.relationship('User',
+        secondary=friends,
+        primaryjoin=id == friends.c.user_id,
+        secondaryjoin=id == friends.c.friend_id,
+        backref='friend_of'
+    )
 
 # Friend request table
 class FriendRequest(db.Model):
@@ -32,7 +46,7 @@ class Message(db.Model):
     sender_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     receiver_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     content = db.Column(db.Text, nullable=False)
-    timestamp = db.Column(db.String(100), default=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -43,7 +57,10 @@ def load_user(user_id):
 def index():
     users = User.query.filter(User.id != current_user.id).all()
     messages = Message.query.filter(
-        ((Message.sender_id == current_user.id) | (Message.receiver_id == current_user.id))
+        or_(
+            Message.sender_id == current_user.id,
+            Message.receiver_id == current_user.id
+        )
     ).order_by(Message.timestamp.desc()).all()
     requests = FriendRequest.query.filter_by(to_user=current_user.id, status='pending').all()
     return render_template('index.html', users=users, messages=messages, requests=requests)
@@ -81,9 +98,22 @@ def logout():
 @app.route('/send_friend_request/<int:user_id>')
 @login_required
 def send_friend_request(user_id):
-    if FriendRequest.query.filter_by(from_user=current_user.id, to_user=user_id).first():
-        flash('Request already sent')
+    # Prevent self-request
+    if user_id == current_user.id:
+        flash("You can't send a request to yourself")
         return redirect(url_for('index'))
+
+    existing = FriendRequest.query.filter(
+        or_(
+            and_(FriendRequest.from_user == current_user.id, FriendRequest.to_user == user_id),
+            and_(FriendRequest.from_user == user_id, FriendRequest.to_user == current_user.id)
+        )
+    ).first()
+
+    if existing:
+        flash('Friend request already exists')
+        return redirect(url_for('index'))
+
     request_obj = FriendRequest(from_user=current_user.id, to_user=user_id)
     db.session.add(request_obj)
     db.session.commit()
@@ -96,6 +126,9 @@ def accept_request(req_id):
     req = FriendRequest.query.get(req_id)
     if req and req.to_user == current_user.id:
         req.status = 'accepted'
+        # Add both users as friends
+        user1 = User.query.get(req.from_user)
+        current_user.friends.append(user1)
         db.session.commit()
         flash('Friend request accepted')
     return redirect(url_for('index'))
@@ -115,6 +148,11 @@ def delete_request(req_id):
 def send_message():
     receiver_id = int(request.form['receiver_id'])
     content = request.form['message']
+
+    if not content.strip():
+        flash("Message cannot be empty")
+        return redirect(url_for('index'))
+
     msg = Message(sender_id=current_user.id, receiver_id=receiver_id, content=content)
     db.session.add(msg)
     db.session.commit()
@@ -138,4 +176,3 @@ if __name__ == '__main__':
         db.create_all()
 
     app.run(host='0.0.0.0', port=int(environ.get("PORT", 5000)), debug=True)
-
